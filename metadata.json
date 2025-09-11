@@ -1,0 +1,7 @@
+{
+  "name": "مدرسة الأنصار لاختبار الحفظ",
+  "description": "An interactive web application for Al-Ansar School students to test and improve their Quran memorization skills. Features include verse-by-verse testing with hidden words, progress tracking, and customizable settings.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

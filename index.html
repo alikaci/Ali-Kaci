@@ -1,0 +1,53 @@
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.19.0",
+    "dexie": "https://aistudiocdn.com/dexie@^4.2.0",
+    "dexie-react-hooks": "https://aistudiocdn.com/dexie-react-hooks@^4.2.0"
+  }
+}
+</script>
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>مدرسة الأنصار لاختبار الحفظ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Tajawal', sans-serif;
+        background-color: #f8f9fa;
+        color: #333;
+      }
+      .dark body {
+        background-color: #121212;
+        color: #eee;
+      }
+      /* Custom primary and secondary colors */
+      .bg-primary { background-color: #004d40; } /* Dark Teal */
+      .bg-primary-dark { background-color: #00251a; }
+      .text-primary { color: #004d40; }
+      .dark .text-primary { color: #80cbc4; }
+      .border-primary { border-color: #004d40; }
+      .ring-primary { --tw-ring-color: #004d40; }
+
+      .bg-secondary { background-color: #ffc107; } /* Amber */
+      .dark .text-secondary { color: #ffc107; }
+      .border-secondary { border-color: #ffc107; }
+
+      .text-primary-dark { color: #00251a; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
