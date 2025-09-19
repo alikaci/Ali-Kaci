@@ -1,33 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { getSurahs, getSurahVerses } from '../services/quranService';
-import { Surah, Verse, Settings, Difficulty } from '../types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { GoogleGenAI, Type } from "@google/genai";
+import { getSurahs } from '../services/quranService';
+import { Surah, Settings } from '../types';
 import Spinner from './Spinner';
 
-type VersePart = { type: 'word'; content: string } | { type: 'input'; correct: string; id: number };
-
-const prepareVerseForCompetition = (verseText: string): VersePart[] => {
-    const words = verseText.split(' ').filter(w => w.length > 0);
-    const parts: VersePart[] = [];
-    let hiddenIndices = new Set<number>();
-    if (words.length <= 1) return words.map(w => ({ type: 'word', content: w }));
-
-    const half = Math.ceil(words.length / 2);
-    const start = Math.floor(Math.random() * (words.length - half + 1));
-    for (let i = 0; i < half; i++) {
-        hiddenIndices.add(start + i);
-    }
-
-    words.forEach((word, index) => {
-        if (hiddenIndices.has(index)) {
-            parts.push({ type: 'input', correct: word, id: index });
-        } else {
-            parts.push({ type: 'word', content: word });
-        }
-    });
-    return parts;
-};
-
-// FIX: Define props for the CompetitionPage component to accept settings.
 interface CompetitionPageProps {
   settings: Settings;
 }
@@ -35,10 +11,10 @@ interface CompetitionPageProps {
 const CompetitionPage: React.FC<CompetitionPageProps> = ({ settings }) => {
   const [surahs, setSurahs] = useState<Surah[]>([]);
   const [selectedSurah, setSelectedSurah] = useState<string>('');
-  const [verses, setVerses] = useState<Verse[]>([]);
-  const [currentVerseIndex, setCurrentVerseIndex] = useState(0);
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [isVerseLoading, setIsVerseLoading] = useState(false);
+  const [isQuestionLoading, setIsQuestionLoading] = useState(false);
   const [player1Score, setPlayer1Score] = useState(0);
   const [player2Score, setPlayer2Score] = useState(0);
   const [timer, setTimer] = useState(30);
@@ -72,30 +48,83 @@ const CompetitionPage: React.FC<CompetitionPageProps> = ({ settings }) => {
   }, [isTimerRunning, timer]);
   
   useEffect(() => {
-    if (verses.length > 0) {
+    if (questions.length > 0) {
         setIsTimerRunning(true);
     }
-  }, [currentVerseIndex, verses]);
+  }, [currentQuestionIndex, questions]);
+
+  const generateQuestions = async (surahName: string) => {
+    const API_KEY = process.env.API_KEY;
+    if (!API_KEY) {
+        alert("مفتاح الواجهة البرمجية (API Key) غير معد. يرجى التأكد من إعداده للمتابعة.");
+        return;
+    }
+    setIsQuestionLoading(true);
+    try {
+        const ai = new GoogleGenAI({ apiKey: API_KEY });
+        const prompt = `أنا أطور تطبيق مسابقة عن القرآن الكريم. للسورة المختارة وهي "${surahName}"، قم بإنشاء 10 أسئلة متنوعة للمسابقة. يجب أن تغطي الأسئلة مواضيع مختلفة مثل: إكمال آية مشهورة، معنى كلمة مهمة، عدد الآيات، سبب التسمية، أو القصة الرئيسية في السورة. لا تذكر اسم السورة في السؤال نفسه. أعد الإجابة بصيغة JSON تحتوي على كائن واحد به مفتاح "questions" وقيمته هي مصفوفة من 10 أسئلة نصية.`;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        questions: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.STRING,
+                                description: "سؤال للمسابقة"
+                            }
+                        }
+                    },
+                }
+            }
+        });
+
+        const jsonResponse = JSON.parse(response.text);
+        if (jsonResponse.questions && Array.isArray(jsonResponse.questions) && jsonResponse.questions.length > 0) {
+            setQuestions(jsonResponse.questions);
+            setCurrentQuestionIndex(0);
+            setPlayer1Score(0);
+            setPlayer2Score(0);
+            setIsCompetitionFinished(false);
+            resetRound();
+        } else {
+            throw new Error("Invalid or empty questions format from API");
+        }
+    } catch (error) {
+        console.error("Error generating questions:", error);
+        alert("عذرًا، حدث خطأ أثناء تحضير الأسئلة. يرجى المحاولة مرة أخرى أو اختيار سورة أخرى.");
+        setSelectedSurah(''); // Reset selection on failure
+    } finally {
+        setIsQuestionLoading(false);
+    }
+};
 
   const handleSurahChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const surahNumber = e.target.value;
     setSelectedSurah(surahNumber);
     if (surahNumber) {
-      setIsVerseLoading(true);
-      const verseList = await getSurahVerses(parseInt(surahNumber, 10));
-      setVerses(verseList);
-      resetGame();
-      setIsVerseLoading(false);
+        const surahInfo = surahs.find(s => s.number === parseInt(surahNumber, 10));
+        if (surahInfo) {
+            setQuestions([]); // Clear old questions immediately
+            await generateQuestions(surahInfo.name);
+        }
     } else {
-      setVerses([]);
+      resetGame();
     }
   };
   
   const resetGame = () => {
-    setCurrentVerseIndex(0);
+    setCurrentQuestionIndex(0);
+    setQuestions([]);
     setPlayer1Score(0);
     setPlayer2Score(0);
     setIsCompetitionFinished(false);
+    setSelectedSurah('');
     resetRound();
   };
   
@@ -134,21 +163,14 @@ const CompetitionPage: React.FC<CompetitionPageProps> = ({ settings }) => {
     }
   };
   
-  const handleNextVerse = () => {
-    if (currentVerseIndex < verses.length - 1) {
-      setCurrentVerseIndex(prev => prev + 1);
+  const handleNextQuestion = () => {
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
       resetRound();
     } else {
       handleEndCompetition();
     }
   };
-
-  const currentVerseParts = useMemo(() => {
-    if (verses.length > 0 && currentVerseIndex < verses.length) {
-      return prepareVerseForCompetition(verses[currentVerseIndex].text);
-    }
-    return [];
-  }, [currentVerseIndex, verses]);
 
   if (isLoading) return <Spinner />;
 
@@ -175,11 +197,7 @@ const CompetitionPage: React.FC<CompetitionPageProps> = ({ settings }) => {
             </div>
           </div>
           <button 
-            onClick={() => {
-              setSelectedSurah('');
-              setVerses([]);
-              resetGame();
-            }}
+            onClick={resetGame}
             className="mt-6 w-full bg-primary hover:bg-primary-dark text-white font-bold py-3 px-4 rounded-lg transition-colors"
           >
             بدء مسابقة جديدة
@@ -211,6 +229,7 @@ const CompetitionPage: React.FC<CompetitionPageProps> = ({ settings }) => {
             id="surah-select"
             value={selectedSurah}
             onChange={handleSurahChange}
+            disabled={isQuestionLoading}
             className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-2 focus:ring-primary focus:border-primary"
           >
             <option value="">-- اختر --</option>
@@ -221,19 +240,22 @@ const CompetitionPage: React.FC<CompetitionPageProps> = ({ settings }) => {
         </div>
       )}
 
-      {isVerseLoading && <Spinner />}
+      {isQuestionLoading && (
+        <div className="text-center p-6">
+            <Spinner />
+            <p className="mt-2 text-gray-600 dark:text-gray-300">جاري تحضير الأسئلة...</p>
+        </div>
+      )}
 
-      {verses.length > 0 && !isVerseLoading && (
+      {questions.length > 0 && !isQuestionLoading && (
         <>
             <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-6 rounded-xl shadow-lg text-center">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                    الآية {verses[currentVerseIndex].numberInSurah} من سورة {surahs.find(s => s.number === parseInt(selectedSurah))?.name}
+                    السؤال {currentQuestionIndex + 1} من {questions.length} (سورة {surahs.find(s => s.number === parseInt(selectedSurah))?.name})
                 </p>
-                <div dir="rtl" className="text-2xl md:text-3xl my-6 leading-loose font-serif text-gray-800 dark:text-gray-100 flex flex-wrap justify-center items-center gap-2">
-                    {currentVerseParts.map((part, index) => 
-                        part.type === 'word' ? <span key={index}>{part.content}</span> : <span key={index} className="text-gray-400">[.....]</span>
-                    )}
-                </div>
+                 <p dir="rtl" className="text-2xl md:text-3xl my-6 leading-relaxed font-semibold text-gray-800 dark:text-gray-100 min-h-[100px] flex items-center justify-center">
+                    {questions[currentQuestionIndex]}
+                </p>
 
                 <div className="my-4">
                     <p className={`text-5xl font-bold font-mono transition-colors ${timer <= 10 ? 'text-red-500' : 'text-primary dark:text-white'}`}>{timer}</p>
@@ -259,8 +281,8 @@ const CompetitionPage: React.FC<CompetitionPageProps> = ({ settings }) => {
                 
                 {(!isTimerRunning || showScoring) && (
                     <div className="mt-8">
-                        <button onClick={handleNextVerse} className="w-full bg-secondary hover:bg-yellow-500 text-primary-dark font-bold py-3 px-4 rounded-lg transition-colors">
-                            {currentVerseIndex === verses.length - 1 ? 'عرض النتيجة النهائية' : 'الآية التالية'}
+                        <button onClick={handleNextQuestion} className="w-full bg-secondary hover:bg-yellow-500 text-primary-dark font-bold py-3 px-4 rounded-lg transition-colors">
+                            {currentQuestionIndex === questions.length - 1 ? 'عرض النتيجة النهائية' : 'السؤال التالي'}
                         </button>
                     </div>
                 )}
